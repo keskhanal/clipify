@@ -1,0 +1,14 @@
+# Python environment and downloaded model
+.venv/
+__pycache__/
+*.pyc
+skills/stream-clipper/face_yunet.onnx
+
+# work files and rendered clips (other people's content, never commit)
+.clipper/
+clips/
+
+# local Claude Code state
+.claude/
+
+.DS_Store
