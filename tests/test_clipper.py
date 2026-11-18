@@ -29,6 +29,16 @@ class Helpers(unittest.TestCase):
         self.assertLessEqual(len(clipper.slugify("x" * 200)), 50)
 
 
+class Finished(unittest.TestCase):
+    def test_ignores_partial_downloads(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "audio.mp4.part").write_bytes(b"x")
+            self.assertIsNone(clipper.finished(d, "audio"))
+            (d / "audio.webm").write_bytes(b"x")
+            self.assertEqual(clipper.finished(d, "audio").name, "audio.webm")
+
+
 class Picks(unittest.TestCase):
     def load(self, data, top=3):
         with tempfile.TemporaryDirectory() as d:

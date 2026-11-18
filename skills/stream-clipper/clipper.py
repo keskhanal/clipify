@@ -50,6 +50,11 @@ def slugify(s):
     return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")[:50] or "clip"
 
 
+def finished(work, stem):
+    """The completed download named stem.*, ignoring a half-finished .part / .ytdl left by an interrupted run."""
+    return next((f for f in sorted(work.glob(f"{stem}.*")) if f.suffix not in (".part", ".ytdl")), None)
+
+
 def probe(path):
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
@@ -238,7 +243,7 @@ def cmd_prep(a):
     mf.write_text(json.dumps(meta, indent=1))
     print(f"{meta['channel']} | {meta['title']} | {hms(meta['duration'] or 0)}\nwork dir: {work}")
 
-    audio = next(iter(work.glob("audio.*")), None)
+    audio = finished(work, "audio")
     if not audio:
         print("1/4 downloading audio only...")
         # sites without an audio-only track (Kick) fall back to the smallest video
@@ -246,7 +251,7 @@ def cmd_prep(a):
         if a.start or a.end:
             args = ["--download-sections", f"*{offset}-{end or 'inf'}"] + args
         ytdlp(args, a.cookies)
-        audio = next(iter(work.glob("audio.*")))
+        audio = finished(work, "audio")
     dur = probe(audio)[2]
 
     print("2/4 measuring loudness...")
@@ -573,7 +578,7 @@ def cmd_render(a):
         tmp = work / f"clip{n:02d}"
         tmp.mkdir(exist_ok=True)
 
-        raw = next(iter(tmp.glob("raw.*")), None)
+        raw = finished(tmp, "raw")
         a0 = max(start - 2, 0)
         cut = tmp / "cut.json"
         if not raw or not cut.exists() or json.loads(cut.read_text()) != [a0, end + 2]:
@@ -583,7 +588,7 @@ def cmd_render(a):
             ytdlp(["-f", "bv*[height<=1080]+ba/b[height<=1080]/b", "--download-sections", f"*{a0}-{end + 2}",
                    "--force-keyframes-at-cuts", "--merge-output-format", "mp4", "-o", tmp / "raw.%(ext)s",
                    meta["url"]], a.cookies)
-            raw = next(iter(tmp.glob("raw.*")))
+            raw = finished(tmp, "raw")
             cut.write_text(json.dumps([a0, end + 2]))
         fw, fh, _ = probe(raw)
 
