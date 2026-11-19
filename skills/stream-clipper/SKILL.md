@@ -21,6 +21,7 @@ Run commands from the user's project folder. Work files go to `./.clipper/<video
 - User gave a link: use it. Any past broadcast works: YouTube, Twitch (`twitch.tv/videos/...`), Kick (`kick.com/<name>/videos/...`), and most other sites yt-dlp supports (Rumble, Facebook, SOOP and so on).
 - No link, a topic: `clipper.py find "<game or topic> stream"` (for example `"GTA 6 stream"`) searches YouTube for recent long videos by views. `--when week` widens the date range.
 - No link, a streamer: `clipper.py find --platform twitch|kick|youtube --channel <name>` lists that streamer's past broadcasts, newest first. Add a word like `"gta"` to filter by title. Twitch and Kick cannot be searched by topic, only by streamer, so if the user names a game and wants Twitch or Kick, ask which streamers (or suggest the well-known ones for that game) and list each.
+- A standing list of streamers: `clipper.py watch` reads `./watchlist.json` (`{"query": "gta", "streamers": {"twitch": [...], "kick": [...], "youtube": [...]}}`) and lists each streamer's newest matching broadcasts across all three platforms, biggest first. Ones already worked on are tagged `[CLIPPED]`, `[PREPPED]` or `[PREP UNFINISHED]` and listed last. Use it when the user wants "the latest" streams to clip; speed matters, since the first clip of a moment to be posted gets most of the views.
 - Pick the biggest relevant ones, tell the user which, and continue.
 
 Live streams: a YouTube stream that is still live cannot be clipped until its replay is published. A Twitch or Kick broadcast that is still live can be clipped up to the present moment. Entries marked `[LIVE NOW]` in `find` are still running.
@@ -72,13 +73,15 @@ Keep every candidate, then write them all to `.clipper/<id>/picks.json`:
     "category": "funny fail",
     "hook": "Tim loses the song game on a technicality",
     "caption": "He knew it was Free Fallin'. The game wanted the live version.",
-    "hashtags": ["#timthetatman", "#gta6", "#gaming"]
+    "hashtags": ["#timthetatman", "#gta6", "#gaming"],
+    "take": "Offcut take: the live version doesn't count"
   }
 ]
 ```
 
 - `hook`: the on-screen title, under 60 characters, says what happens and names the streamer. No clickbait the clip does not deliver.
 - `caption`: one or two lines for the post. `hashtags`: 3 to 6, streamer + game + one broad tag.
+- `take` (optional): the channel's own one-line reaction, shown in place of the hook for the last 3 seconds. Under 60 characters, an opinion or punchline about what just happened, not a summary of it. It is what makes the clip the channel's edit rather than a straight re-upload, which matters for monetization, so write one for every pick the user is going to post.
 - Only quote what the transcript says. Whisper mishears names; if a hook depends on a name or word you are unsure of, phrase it so it does not.
 
 ## 4. Render
@@ -86,6 +89,7 @@ Keep every candidate, then write them all to `.clipper/<id>/picks.json`:
 ```
 clipper.py render .clipper/<id>            # top 3 by score
 clipper.py render .clipper/<id> --top 5
+clipper.py render .clipper/<id> --brand branding/logo.png   # channel logo as a small round watermark
 ```
 
 For each pick it downloads only those seconds of video, finds the facecam, and writes to `clips/<id>/`:
@@ -99,8 +103,9 @@ Look at every `_preview.jpg` (and `.clipper/<id>/clipNN/facecam_check.jpg`, the 
 
 - Layout printed `cam [x, y, w, h]`: the top panel should show the streamer and nothing else. The detector looks for a face that moves (so thumbnails and posters are ignored) and then for the camera's border. If the box is wrong, rerun with `--facecam x,y,w,h` (source pixels), or put `"facecam": [x, y, w, h]` on that pick.
 - `fullcam`: the camera is the main picture (just chatting, or a camera wider than 40% of the frame). The clip is a single 9:16 crop that follows the streamer's face.
+- On-screen alerts with a face in them (sub or member alert GIFs) can fool the detector for clips where the alert was showing. Compare `facecam_check.jpg` against the streamer's real camera overlay.
 - `nocam`: no moving face found, the clip is a plain centre crop. If there is a facecam in the frame, pass `--facecam`. If there really is none, that is fine.
 - Layouts change during a stream, so each clip is detected separately. Check every one.
-- Captions come from Whisper and can mishear names and game titles. Read the caption words on each preview; if a wrong word is prominent, say so in your report.
+- Captions come from Whisper and can mishear names and game titles. Read the caption words on each preview; if a wrong word is prominent, say so in your report. If the transcript is mostly garbled (common for Hindi and other non-English streams) or the captions show as empty boxes, rerun with `--no-captions`.
 
 Then tell the user: how long the stream was, how many candidates you found, which ones you kept and why, and where the files are. Remind them to watch each clip before posting, and to clip streamers who allow it.

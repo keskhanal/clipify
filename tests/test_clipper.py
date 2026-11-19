@@ -144,11 +144,18 @@ class Render(unittest.TestCase):
             (work / "meta.json").write_text(json.dumps(
                 {"url": "https://www.twitch.tv/videos/1", "id": "t", "channel": "Tester", "extractor": "TwitchVod"}))
             (work / "picks.json").write_text(json.dumps(
-                [{"start": 103.0, "end": 108.0, "score": 80, "hook": "It's a test", "caption": "c", "hashtags": ["#t"]}]))
+                [{"start": 103.0, "end": 108.0, "score": 80, "hook": "It's a test", "caption": "c", "hashtags": ["#t"],
+                  "take": opts.get("take")}]))
             # what render would have downloaded: start 102.8 minus 2 s padding, end 108.4 plus 2 s
             (work / "clip01" / "cut.json").write_text(json.dumps([100.8, 110.4]))
+            brand = None
+            if opts.get("brand"):
+                from PIL import Image
+                brand = Path(d) / "logo.png"
+                Image.new("RGB", (400, 400), (255, 98, 41)).save(brand)
             clipper.cmd_render(argparse.Namespace(work=str(work), top=3, out=str(out), layout=opts.get("layout", "auto"),
-                                                  facecam=opts.get("facecam"), cookies=None))
+                                                  facecam=opts.get("facecam"), no_captions=opts.get("no_captions", False),
+                                                  brand=brand, cookies=None))
             mp4 = next(out.glob("*.mp4"))
             w, h, dur = clipper.probe(mp4)
             return w, h, dur, next(out.glob("*.txt")).read_text(), len(list(out.glob("*_preview.jpg")))
@@ -168,6 +175,21 @@ class Render(unittest.TestCase):
 
     def test_auto_layout_without_a_face(self):
         self.assertEqual(self.render()[:2], (1080, 1920))
+
+    def test_no_captions(self):
+        w, h, dur, _, _ = self.render(facecam="900,40,360,200", no_captions=True)
+        self.assertEqual((w, h), (1080, 1920))
+        self.assertAlmostEqual(dur, 5.6, delta=0.2)
+
+    def test_take_and_brand(self):
+        w, h, dur, _, _ = self.render(facecam="900,40,360,200", take="Offcut take: unreal", brand=True)
+        self.assertEqual((w, h), (1080, 1920))
+        self.assertAlmostEqual(dur, 5.6, delta=0.2)
+
+    def test_take_and_brand_without_captions(self):
+        w, h, dur, _, _ = self.render(layout="nocam", take="Offcut take", brand=True, no_captions=True)
+        self.assertEqual((w, h), (1080, 1920))
+        self.assertAlmostEqual(dur, 5.6, delta=0.2)
 
 
 if __name__ == "__main__":

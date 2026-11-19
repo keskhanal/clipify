@@ -3,6 +3,7 @@
 
 Subcommands
   find    list big recent streams for a search query
+  watch   list new broadcasts from a watchlist of streamers, marking ones already prepped
   prep    audio-only download -> local transcript + loudness + chat spikes -> 12-min windows
   render  read picks.json -> download only those minutes -> facecam-on-top vertical clips
 
@@ -67,30 +68,30 @@ def probe(path):
 
 # ----------------------------------------------------------------------------- find
 
-def cmd_find(a):
+def list_videos(platform, channel, query, n, min_minutes, when="today", cookies=None):
+    """(views, duration, channel, title, link) rows: a channel's past broadcasts newest first, or a YouTube search."""
     from urllib.parse import quote_plus
-    if a.channel:
-        # a channel's past broadcasts, newest first
-        ch = a.channel.lstrip("@")
+    if channel:
+        ch = channel.lstrip("@")
         url = {"youtube": f"https://www.youtube.com/@{ch}/streams",
                "twitch": f"https://www.twitch.tv/{ch}/videos?filter=archives&sort=time",
-               "kick": f"https://kick.com/{ch}/videos"}[a.platform]
-    elif a.platform == "youtube":
-        if not a.query:
+               "kick": f"https://kick.com/{ch}/videos"}[platform]
+    elif platform == "youtube":
+        if not query:
             sys.exit("Give a search query, or --channel NAME.")
-        sp = {"today": "EgIIAg%3D%3D", "week": "EgIIAw%3D%3D", "month": "EgIIBA%3D%3D"}[a.when]
-        url = f"https://www.youtube.com/results?search_query={quote_plus(a.query)}&sp={sp}"
+        sp = {"today": "EgIIAg%3D%3D", "week": "EgIIAw%3D%3D", "month": "EgIIBA%3D%3D"}[when]
+        url = f"https://www.youtube.com/results?search_query={quote_plus(query)}&sp={sp}"
     else:
-        sys.exit(f"Searching {a.platform} by topic is not supported. Name a streamer: "
-                 f"find --platform {a.platform} --channel NAME")
-    out = ytdlp(["--flat-playlist", "--playlist-end", a.n, "-J", url], a.cookies, capture=True).stdout
+        sys.exit(f"Searching {platform} by topic is not supported. Name a streamer: "
+                 f"find --platform {platform} --channel NAME")
+    out = ytdlp(["--flat-playlist", "--playlist-end", n, "-J", url], cookies, capture=True).stdout
     rows, seen = [], set()
     for e in json.loads(out).get("entries") or []:
         dur = e.get("duration") or 0
         live = e.get("is_live") or e.get("live_status") == "is_live"
-        if dur < a.min_minutes * 60 and not live:
+        if dur < min_minutes * 60 and not live:
             continue
-        if a.channel and a.query and not all(w in (e.get("title") or "").lower() for w in a.query.lower().split()):
+        if channel and query and not all(w in (e.get("title") or "").lower() for w in query.lower().split()):
             continue
         link = e.get("webpage_url") or e.get("url") or ""
         if e.get("ie_key") == "Youtube" and not link.startswith("http"):
@@ -99,8 +100,13 @@ def cmd_find(a):
         if link in seen:
             continue
         seen.add(link)
-        rows.append((e.get("view_count") or 0, dur, e.get("channel") or e.get("uploader") or a.channel or "?",
+        rows.append((e.get("view_count") or 0, dur, e.get("channel") or e.get("uploader") or channel or "?",
                      (e.get("title") or "?") + ("  [LIVE NOW]" if live else ""), link))
+    return rows
+
+
+def cmd_find(a):
+    rows = list_videos(a.platform, a.channel, a.query, a.n, a.min_minutes, a.when, a.cookies)
     if not a.channel:
         rows.sort(reverse=True)
     for views, dur, ch, title, link in rows[:a.top]:
@@ -109,6 +115,38 @@ def cmd_find(a):
         print(f"No past broadcasts found for {a.channel} on {a.platform}. Check the spelling of the channel name."
               if a.channel else
               "Nothing long enough matched. Try a different query, --when week, or a lower --min-minutes.")
+
+
+def cmd_watch(a):
+    """New broadcasts from every streamer in the watchlist, marked if a .clipper work dir already has them."""
+    path = Path(a.list)
+    if not path.exists():
+        sys.exit(f"{path} does not exist. Write it first, for example:\n"
+                 '{"query": "gta", "streamers": {"twitch": ["jynxzi"], "kick": ["adinross"], "youtube": ["IShowSpeed"]}}')
+    cfg = json.loads(path.read_text())
+    query = a.query if a.query is not None else cfg.get("query", "")
+    done = {}
+    for m in Path(a.root, ".clipper").glob("*/meta.json"):
+        meta = json.loads(m.read_text())
+        if Path(a.root, "clips", meta["id"]).exists() or (m.parent / "picks.json").exists():
+            done[meta["url"]] = "CLIPPED"
+        else:
+            done[meta["url"]] = "PREPPED" if any((m.parent / "windows").glob("w*.txt")) else "PREP UNFINISHED"
+    rows = []
+    for platform, names in cfg.get("streamers", {}).items():
+        for name in names:
+            try:
+                found = list_videos(platform, name, query, a.n, a.min_minutes, cookies=a.cookies)
+            except subprocess.CalledProcessError as e:
+                print(f"  skipped {platform}/{name}: {(e.stderr or '').strip().splitlines()[-1:] or 'lookup failed'}")
+                continue
+            rows += [(r, platform) for r in found[:a.per]]
+    rows.sort(key=lambda x: (x[0][4] in done, -x[0][0]))
+    for (views, dur, ch, title, link), platform in rows:
+        tag = f"[{done[link]}] " if link in done else ""
+        print(f"{tag}{views:>10,} views  {hms(dur)}  {platform}/{ch}  |  {title}\n            {link}")
+    if not rows:
+        print(f"Nothing matching {query!r} from the watchlist.")
 
 
 # ----------------------------------------------------------------------------- prep
@@ -436,7 +474,7 @@ def load_font(size):
     return ImageFont.load_default(size)
 
 
-def title_png(text, y_center, path):
+def title_png(text, y_center, path, bg=(255, 255, 255, 255), fg=(0, 0, 0, 255)):
     from PIL import Image, ImageDraw
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -459,9 +497,23 @@ def title_png(text, y_center, path):
     bw = int(max(d.textlength(l, font=font) for l in lines)) + 64
     bh = lh * len(lines) + 36
     x0, y0 = (W - bw) // 2, max(20, y_center - bh // 2)
-    d.rounded_rectangle([x0, y0, x0 + bw, y0 + bh], radius=22, fill=(255, 255, 255, 255))
+    d.rounded_rectangle([x0, y0, x0 + bw, y0 + bh], radius=22, fill=bg)
     for i, l in enumerate(lines):
-        d.text((W // 2, y0 + 18 + i * lh + lh // 2), l, font=font, fill=(0, 0, 0, 255), anchor="mm")
+        d.text((W // 2, y0 + 18 + i * lh + lh // 2), l, font=font, fill=fg, anchor="mm")
+    img.save(path)
+
+
+TAKE_SECS = 3.0            # how long the channel's own take replaces the hook at the end of a clip
+BRAND_PX = 110             # watermark size
+
+
+def brand_png(logo, path):
+    """The channel logo as a round, slightly transparent watermark."""
+    from PIL import Image, ImageDraw
+    img = Image.open(logo).convert("RGBA").resize((BRAND_PX, BRAND_PX), Image.LANCZOS)
+    mask = Image.new("L", img.size, 0)
+    ImageDraw.Draw(mask).ellipse([0, 0, BRAND_PX - 1, BRAND_PX - 1], fill=220)
+    img.putalpha(mask)
     img.save(path)
 
 
@@ -614,13 +666,38 @@ def cmd_render(a):
             title_y, cap_y = 250, int(H * 0.66)
 
         title_png(p["hook"], title_y, tmp / "title.png")
-        caps = build_captions(words, start, dur, tmp)
         name = f"{n:02d}_{slugify(p['hook'])}"
         out = out_dir / f"{name}.mp4"
+        # input 0 is the source; overlays are layered on in order: hook (or hook then take), watermark, captions
+        inputs, graph = [], [base]
+
+        def add(*args):
+            inputs.extend(args)
+            return inputs.count("-i")          # this input's index
+
+        hook = add("-i", tmp / "title.png")
+        take = str(p.get("take") or "").strip()
+        if take:
+            swap = max(dur - TAKE_SECS, dur / 2)
+            title_png(take, title_y, tmp / "take.png", bg=(17, 17, 19, 255), fg=(255, 98, 41, 255))
+            card = add("-i", tmp / "take.png")
+            graph += [f"[base][{hook}:v]overlay=0:0:enable='lt(t,{swap:.2f})'[h]",
+                      f"[h][{card}:v]overlay=0:0:enable='gte(t,{swap:.2f})'[hooked]"]
+        else:
+            graph.append(f"[base][{hook}:v]overlay=0:0[hooked]")
+        last = "hooked"
+        if a.brand:
+            brand_png(a.brand, tmp / "brand.png")
+            logo = add("-i", tmp / "brand.png")
+            # left edge under the hook: the Shorts player covers the right column and the bottom strip
+            graph.append(f"[{last}][{logo}:v]overlay=28:{title_y + 130}[branded]")
+            last = "branded"
+        if not a.no_captions:
+            caps = add("-f", "concat", "-safe", 0, "-i", build_captions(words, start, dur, tmp))
+            graph += [f"[{caps}:v]fps=30,format=rgba[c]", f"[{last}][c]overlay=0:{cap_y}[captioned]"]
+        graph[-1] = graph[-1].rsplit("[", 1)[0] + "[v]"
         run(["ffmpeg", "-y", "-v", "error", "-ss", f"{start - a0:.3f}", "-t", f"{dur:.3f}", "-i", raw,
-             "-i", tmp / "title.png", "-f", "concat", "-safe", 0, "-i", caps,
-             "-filter_complex",
-             f"{base};[base][1:v]overlay=0:0[t];[2:v]fps=30,format=rgba[c];[t][c]overlay=0:{cap_y}[v]",
+             *inputs, "-filter_complex", ";".join(graph),
              "-map", "[v]", "-map", "0:a?", "-t", f"{dur:.3f}", *enc, "-pix_fmt", "yuv420p",
              "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", out])
         run(["ffmpeg", "-y", "-v", "error", "-ss", f"{dur / 2:.2f}", "-i", out, "-frames:v", 1,
@@ -651,6 +728,15 @@ def main():
     f.add_argument("--min-minutes", type=int, default=30)
     f.set_defaults(fn=cmd_find)
 
+    w = sub.add_parser("watch", help="list new broadcasts from every streamer in a watchlist")
+    w.add_argument("--list", default="watchlist.json", help="JSON file: {query, streamers: {platform: [names]}}")
+    w.add_argument("--query", help="title filter, overrides the watchlist's query (\"\" for none)")
+    w.add_argument("--root", default=".", help="where the .clipper and clips folders are")
+    w.add_argument("-n", type=int, default=10, help="recent videos to scan per streamer")
+    w.add_argument("--per", type=int, default=2, help="matches to show per streamer")
+    w.add_argument("--min-minutes", type=int, default=30)
+    w.set_defaults(fn=cmd_watch)
+
     p = sub.add_parser("prep", help="download audio, transcribe, mark loud/chat spikes, write windows")
     p.add_argument("url")
     p.add_argument("--root", default=".", help="where the .clipper work folder goes")
@@ -666,6 +752,9 @@ def main():
     r.add_argument("--out", help="output folder (default ./clips/<id>)")
     r.add_argument("--layout", choices=["auto", "nocam"], default="auto")
     r.add_argument("--facecam", help="x,y,w,h of the facecam in source pixels, overrides detection")
+    r.add_argument("--no-captions", action="store_true",
+                   help="skip word-by-word captions (for languages Whisper transcribes badly)")
+    r.add_argument("--brand", help="channel logo image, drawn as a small round watermark under the hook")
     r.set_defaults(fn=cmd_render)
 
     a = ap.parse_args()
