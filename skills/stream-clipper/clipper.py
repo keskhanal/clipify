@@ -121,7 +121,7 @@ def cmd_watch(a):
     """New broadcasts from every streamer in the watchlist, marked if a .clipper work dir already has them."""
     path = Path(a.list)
     if not path.exists():
-        sys.exit(f"{path} does not exist. Write it first, for example:\n"
+        sys.exit(f"{path} does not exist. Copy watchlist.example.json from the clipify repo and edit it, or write:\n"
                  '{"query": "gta", "streamers": {"twitch": ["jynxzi"], "kick": ["adinross"], "youtube": ["IShowSpeed"]}}')
     cfg = json.loads(path.read_text())
     query = a.query if a.query is not None else cfg.get("query", "")
@@ -503,7 +503,14 @@ def title_png(text, y_center, path, bg=(255, 255, 255, 255), fg=(0, 0, 0, 255)):
     img.save(path)
 
 
-TAKE_SECS = 3.0            # how long the channel's own take replaces the hook at the end of a clip
+def hex_pair(s):
+    """argparse type for "RRGGBB,RRGGBB"."""
+    if not re.fullmatch(r"#?[0-9a-fA-F]{6},#?[0-9a-fA-F]{6}", s.strip()):
+        raise argparse.ArgumentTypeError("expected two hex colors, like 111111,FFD400")
+    return s.replace("#", "").strip()
+
+
+TAKE_SECS = 3.0           # how long the channel's own take replaces the hook at the end of a clip
 BRAND_PX = 110             # watermark size
 
 
@@ -679,7 +686,8 @@ def cmd_render(a):
         take = str(p.get("take") or "").strip()
         if take:
             swap = max(dur - TAKE_SECS, dur / 2)
-            title_png(take, title_y, tmp / "take.png", bg=(17, 17, 19, 255), fg=(255, 98, 41, 255))
+            bg, fg = (tuple(int(c[i:i + 2], 16) for i in (0, 2, 4)) + (255,) for c in a.take_colors.split(","))
+            title_png(take, title_y, tmp / "take.png", bg=bg, fg=fg)
             card = add("-i", tmp / "take.png")
             graph += [f"[base][{hook}:v]overlay=0:0:enable='lt(t,{swap:.2f})'[h]",
                       f"[h][{card}:v]overlay=0:0:enable='gte(t,{swap:.2f})'[hooked]"]
@@ -755,6 +763,8 @@ def main():
     r.add_argument("--no-captions", action="store_true",
                    help="skip word-by-word captions (for languages Whisper transcribes badly)")
     r.add_argument("--brand", help="channel logo image, drawn as a small round watermark under the hook")
+    r.add_argument("--take-colors", default="111111,FFD400", type=hex_pair,
+                   help="background,text hex colors of the take card (default 111111,FFD400)")
     r.set_defaults(fn=cmd_render)
 
     a = ap.parse_args()

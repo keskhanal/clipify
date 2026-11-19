@@ -12,3 +12,7 @@ clips/
 .claude/
 
 .DS_Store
+
+# your channel's own setup: logo artwork for --brand, streamer watchlist
+branding/
+watchlist.json

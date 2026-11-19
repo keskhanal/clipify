@@ -74,7 +74,7 @@ Keep every candidate, then write them all to `.clipper/<id>/picks.json`:
     "hook": "Tim loses the song game on a technicality",
     "caption": "He knew it was Free Fallin'. The game wanted the live version.",
     "hashtags": ["#timthetatman", "#gta6", "#gaming"],
-    "take": "Offcut take: the live version doesn't count"
+    "take": "Honestly the live version should count"
   }
 ]
 ```
@@ -90,7 +90,10 @@ Keep every candidate, then write them all to `.clipper/<id>/picks.json`:
 clipper.py render .clipper/<id>            # top 3 by score
 clipper.py render .clipper/<id> --top 5
 clipper.py render .clipper/<id> --brand branding/logo.png   # channel logo as a small round watermark
+clipper.py render .clipper/<id> --take-colors 111113,FF6229   # take card background,text in the channel's colors
 ```
+
+If the user has a logo or brand colors (check for a `branding/` folder, or ask once), use them on every render.
 
 For each pick it downloads only those seconds of video, finds the facecam, and writes to `clips/<id>/`:
 - `NN_<hook>.mp4`: 1080x1920, facecam on top, gameplay below, hook title, word-by-word captions

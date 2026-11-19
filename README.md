@@ -82,6 +82,7 @@ CLIP=skills/stream-clipper/clipper.py
 $PY $CLIP find "GTA 6 stream"            # biggest recent YouTube streams
 $PY $CLIP find --platform twitch --channel timthetatman   # a streamer's past broadcasts
 $PY $CLIP find --platform kick --channel xqc
+$PY $CLIP watch                          # newest streams from everyone in watchlist.json
 $PY $CLIP prep "<url>"                   # transcript windows in .clipper/<id>/windows/
 # write .clipper/<id>/picks.json (format in skills/stream-clipper/SKILL.md)
 $PY $CLIP render .clipper/<id> --top 3
@@ -94,6 +95,17 @@ Useful flags:
 - `prep --model small|medium|large-v3-turbo` to choose the Whisper size (default picks by RAM)
 - `render --facecam x,y,w,h` to set the facecam box by hand
 - `render --layout nocam` for a plain centre crop
+- `render --no-captions` to skip captions, for languages Whisper transcribes badly
+- `render --brand logo.png` to add your channel logo as a small watermark
+- `render --take-colors 111111,FFD400` to set the take card's background and text colors
+
+### Your own touch
+
+A pick can carry a `take`: a one-line reaction of your own that replaces the hook for the last 3 seconds of the clip. With `--brand` and your colors, every clip carries your channel's mark. That is better for viewers, and platforms reviewing a channel for reused content look for exactly that kind of original contribution.
+
+### Watching streamers
+
+Copy `watchlist.example.json` to `watchlist.json` and list the streamers you follow on each platform, plus a title filter. `watch` shows their newest matching broadcasts, biggest first, and tags the ones you have already prepped or clipped. `watchlist.json` is gitignored.
 
 ## Project layout
 

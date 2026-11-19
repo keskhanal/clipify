@@ -155,7 +155,7 @@ class Render(unittest.TestCase):
                 Image.new("RGB", (400, 400), (255, 98, 41)).save(brand)
             clipper.cmd_render(argparse.Namespace(work=str(work), top=3, out=str(out), layout=opts.get("layout", "auto"),
                                                   facecam=opts.get("facecam"), no_captions=opts.get("no_captions", False),
-                                                  brand=brand, cookies=None))
+                                                  brand=brand, take_colors="111111,FFD400", cookies=None))
             mp4 = next(out.glob("*.mp4"))
             w, h, dur = clipper.probe(mp4)
             return w, h, dur, next(out.glob("*.txt")).read_text(), len(list(out.glob("*_preview.jpg")))
@@ -182,12 +182,12 @@ class Render(unittest.TestCase):
         self.assertAlmostEqual(dur, 5.6, delta=0.2)
 
     def test_take_and_brand(self):
-        w, h, dur, _, _ = self.render(facecam="900,40,360,200", take="Offcut take: unreal", brand=True)
+        w, h, dur, _, _ = self.render(facecam="900,40,360,200", take="My take: unreal", brand=True)
         self.assertEqual((w, h), (1080, 1920))
         self.assertAlmostEqual(dur, 5.6, delta=0.2)
 
     def test_take_and_brand_without_captions(self):
-        w, h, dur, _, _ = self.render(layout="nocam", take="Offcut take", brand=True, no_captions=True)
+        w, h, dur, _, _ = self.render(layout="nocam", take="My take", brand=True, no_captions=True)
         self.assertEqual((w, h), (1080, 1920))
         self.assertAlmostEqual(dur, 5.6, delta=0.2)
 

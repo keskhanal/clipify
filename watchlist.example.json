@@ -1,0 +1,8 @@
+{
+  "query": "gta",
+  "streamers": {
+    "twitch": ["jynxzi", "kaicenat", "summit1g", "zackrawrr", "xqc", "lacy", "tarik", "stableronaldo"],
+    "kick": ["adinross", "xqc"],
+    "youtube": ["IShowSpeed", "Lacy", "DuckyReloaded"]
+  }
+}
